@@ -98,7 +98,13 @@ class SpyData:
     spy_close: pd.DataFrame
     date_index: DatetimeIndex
 
-    def __init__(self, start_date: datetime, end_date: datetime):
+    def __init__(self, start_date: datetime, end_date: datetime) -> object:
+        """
+        start_date: the start of the period for the SPY data.  One year
+        before this date will be fetched to allow for a moving average
+        from start_date
+        end_date: the end of the period for the SPY data.
+        """
         spy_start: datetime = start_date - timedelta(days=365)
         self.spy_close = get_market_data(file_name=self.spy_close_file,
                                          data_col='Close',
@@ -108,7 +114,7 @@ class SpyData:
                                          end_date=end_date)
         self.date_index = self.spy_close.index
 
-    def spy_close(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
+    def close_data(self, start_date: datetime, end_date: datetime) -> pd.DataFrame:
         """
         Return a section of SPY close prices from start_date to end_date
         """
@@ -132,17 +138,17 @@ class SpyData:
         _average = self.spy_close.values[start_ix:end_ix+1].mean()
         return _average
 
-    def running_sum(self, values: np.array, start_ix: int, end_ix: int, win_size: int) -> np.array:
+    def moving_sum(self, values: np.array, start_ix: int, end_ix: int, win_size: int) -> np.array:
             sum_l: list = []
             win_start_ix = start_ix - (win_size - 1)
             win_end_ix = start_ix
             sum = values[win_start_ix:win_end_ix + 1].sum()
             win_end_ix = win_end_ix + 1
-            sum_l.append(sum)
+            sum_l.append(float(sum))
             while win_end_ix <= end_ix:
                 win_start_ix = win_end_ix - win_size
-                start_val = values[win_start_ix]
-                end_val = values[win_end_ix]
+                start_val = float(values[win_start_ix])
+                end_val = float(values[win_end_ix])
                 sum = (sum - start_val) + end_val
                 sum_l.append(sum)
                 win_end_ix = win_end_ix + 1
@@ -160,30 +166,24 @@ class SpyData:
         """
         start_ix = findDateIndex(date_index=self.date_index, search_date=start_date)
         end_ix = findDateIndex(date_index=self.date_index, search_date=end_date)
-        win_start_ix = start_ix - (window - 1)
-        assert start_ix >= 0 and end_ix >= 0 and win_start_ix >= 0
-        sum_l: list = []
+        assert start_ix >= 0 and end_ix >= 0
         spy_values = self.spy_close.values
-        sum = spy_values[win_start_ix:start_ix + 1].sum()
-        win_start_ix = win_start_ix + 1
-        start_ix = start_ix + 1
-        while start_ix <= end_ix:
-            sum_l.append(sum)
-            start_val = spy_values[win_start_ix]
-            end_val = spy_values[start_ix]
-            sum = (sum - start_val) + end_val
-            win_start_ix = win_start_ix + 1
-            start_ix = start_ix + 1
-
+        sum_a: np.array = self.moving_sum(values=spy_values,
+                                start_ix=start_ix,
+                                end_ix=end_ix,
+                                win_size=window_size)
+        avg_a = sum_a / window_size
+        avg_df = pd.DataFrame(avg_a)
+        avg_index = self.date_index[start_ix:end_ix+1]
+        avg_df.index = avg_index
+        avg_df.columns = [f'{self.spy_etf} {window_size}-day avg']
+        return avg_df
 
 
 spy_data = SpyData(start_date, end_date)
-spy_start_avg = spy_data.avg(start_date)
-
-d_end = 13
-d = np.array(range(1, d_end))
-sum_a = spy_data.running_sum(values=d, start_ix=3, end_ix=(len(d) - 1), win_size=4)
-print(d)
-print(sum_a)
+spy_close = spy_data.close_data(start_date, end_date)
+spy_moving_avg = spy_data.moving_avg(start_date, end_date)
+plot_df = pd.concat([spy_close, spy_moving_avg], axis=1)
+plot_df.plot(grid=True, title=f'SPY and 200-day average: {start_date.strftime("%m/%d/%Y")} - {end_date.strftime("%m/%d/%Y")}', figsize=(10,6))
 
 print("Hi there")
