@@ -303,10 +303,10 @@ def portfolio_return(holdings: float,
     for index, period in month_periods.iterrows():
         start_ix = period['start_ix']
         end_ix = period['end_ix']
-        start_date: datetime = convert_date(period['start_date'])
+        period_start_date: datetime = convert_date(period['start_date'])
         r_df = pd.DataFrame()
         asset_name = ''
-        if spy_data.risk_state(start_date) == RiskState.RISK_ON:
+        if spy_data.risk_state(period_start_date) == RiskState.RISK_ON:
             asset_name: str = chooseAssetName(start_ix, end_ix, risk_asset)
             risk_close_prices = pd.DataFrame(risk_asset[asset_name][start_ix:end_ix+1])
             r_df = return_df(risk_close_prices)
