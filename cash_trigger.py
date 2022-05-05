@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 from enum import Enum
 
+from numpy import sqrt
 from tabulate import tabulate
 from typing import List, Tuple
 from pandas_datareader import data
@@ -12,6 +13,13 @@ from dateutil.relativedelta import relativedelta
 import numpy as np
 from pathlib import Path
 import tempfile
+
+# QuantStrats was written by Ran Aroussi. See https://aroussi.com/
+# See https://pypi.org/project/QuantStats/
+# # https://github.com/ranaroussi/quantstats
+# pip install QuantStats
+import quantstats as qs
+
 
 plt.style.use('seaborn-whitegrid')
 pd.options.mode.chained_assignment = 'raise'
@@ -265,6 +273,28 @@ def find_month_periods(start_date: datetime, end_date:datetime, data: pd.DataFra
     return periods_df
 
 
+def find_year_periods(data: pd.DataFrame) -> pd.DataFrame:
+    date_index = data.index
+    start_l = list()
+    end_l = list()
+    year_l = list()
+    start_l.append(0)
+    current_year = convert_date(date_index[0]).year
+    year_l.append(current_year)
+    for i in range(1, len(date_index)):
+        date_i = convert_date(date_index[i])
+        year_i = date_i.year
+        if (year_i > current_year):
+            end_l.append(i-1)
+            start_l.append(i)
+            year_l.append(year_i)
+            current_year = year_i
+    end_l.append(i)
+    periods_df = pd.DataFrame(list(zip(start_l, end_l, year_l)), columns=['start_ix', 'end_ix', 'year'])
+    return periods_df
+
+
+
 def simple_return(time_series: np.array, period: int = 1) -> List :
     return list(((time_series[i]/time_series[i-period]) - 1.0 for i in range(period, len(time_series), period)))
 
@@ -396,7 +426,7 @@ spy_portfolio_df, assets_df = portfolio_return(holdings=holdings,
 plot_df = build_plot_data(holdings=holdings, portfolio_df=spy_portfolio_df, spy_df=spy_close)
 
 spy_start_val = float(spy_close[:].values[0])
-spy_only_portfolio, t = portfolio_return(holdings=spy_start_val,
+spy_only_portfolio, assets_df = portfolio_return(holdings=spy_start_val,
                                          risk_asset=spy_close,
                                          bond_asset=spy_close,
                                          spy_data=spy_data,
@@ -405,9 +435,74 @@ spy_only_portfolio, t = portfolio_return(holdings=spy_start_val,
 
 plot_df = build_plot_data(holdings=spy_start_val, portfolio_df=spy_only_portfolio, spy_df=spy_close)
 
+assets_collapsed = collapse_asset_df(assets_df)
+
 spy_only_index = spy_only_portfolio.index
 
 
-assets_collapsed = collapse_asset_df(assets_df)
+def calculate_volatility(spy_close: pd.DataFrame, portfolio: pd.DataFrame) -> pd.DataFrame:
+    spy_return = return_df(spy_close)
+    port_return = return_df(portfolio)
+    spy_volatility = round(spy_return.values.std() * sqrt(trading_days) * 100, 2)
+    port_volatility = round(port_return.values.std() * sqrt(trading_days) * 100, 2)
+    vol_df = pd.DataFrame([port_volatility, spy_volatility])
+    vol_df.columns = ['Yearly Standard Deviation (percent)']
+    vol_df.index = ['Portfolio', 'SPY']
+    return vol_df
+
+
+vol_df = calculate_volatility(spy_close, spy_portfolio_df)
+
+print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
+
+d2010_start: datetime = datetime.fromisoformat('2010-01-04')
+d2010_spy_portfolio_df, assets_df = portfolio_return(holdings=holdings,
+                                               risk_asset=spy_close,
+                                               bond_asset=cash_trigger_bond_adjclose,
+                                               spy_data=spy_data,
+                                               start_date=d2010_start,
+                                               end_date=end_date
+                                               )
+
+plot_df = build_plot_data(holdings=holdings, portfolio_df=d2010_spy_portfolio_df, spy_df=spy_close)
+
+
+t_spy_close = pd.DataFrame( plot_df['SPY'])
+t_spy_close.columns = ['SPY']
+t_portfolio = pd.DataFrame( plot_df['portfolio'])
+t_portfolio.columns = ['portfolio']
+vol_df = calculate_volatility(t_spy_close, t_portfolio)
+print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
+
+
+t_port_return = return_df(spy_only_portfolio)
+
+# The drawdown code only works on a Series object
+t_port_return_s = t_port_return[t_port_return.columns[0]]
+t_port_return_s.index = pd.to_datetime(t_port_return.index)
+qs.plots.drawdown( t_port_return_s, figsize=(10,8) )
+
+year_periods_df = find_year_periods(spy_only_portfolio)
+
+max_drawdown = qs.stats.max_drawdown(spy_only_portfolio)
+
+def yearly_drawdown(prices: pd.DataFrame) -> pd.DataFrame:
+    year_periods = find_year_periods(prices)
+    year_l = list()
+    drawdown_l = list()
+    for ix, period in year_periods.iterrows():
+        start_ix = period['start_ix']
+        end_ix = period['end_ix']
+        year = period['year']
+        year_df = prices[:][start_ix:end_ix+1]
+        year_drawdown = qs.stats.max_drawdown(year_df).values[0]
+        year_l.append(year)
+        drawdown_l.append(round(year_drawdown * 100, 2))
+    drawdown_df = pd.DataFrame(list(zip(year_l, drawdown_l)), columns=['year', 'drawdown'])
+    return drawdown_df
+
+
+drawdown_df = yearly_drawdown(plot_df)
+
 
 print("Hi there")
