@@ -486,23 +486,62 @@ year_periods_df = find_year_periods(spy_only_portfolio)
 
 max_drawdown = qs.stats.max_drawdown(spy_only_portfolio)
 
-def yearly_drawdown(prices: pd.DataFrame) -> pd.DataFrame:
+
+def yearly_return(prices: pd.DataFrame) -> pd.DataFrame:
     year_periods = find_year_periods(prices)
-    year_l = list()
-    drawdown_l = list()
+    year_return_df = pd.DataFrame()
     for ix, period in year_periods.iterrows():
         start_ix = period['start_ix']
         end_ix = period['end_ix']
-        year = period['year']
+        start_val = prices[:][start_ix:start_ix + 1].values
+        end_val = prices[:][end_ix:end_ix + 1].values
+        r = (end_val/start_val) - 1
+        r_percent = np.round(r * 100, 2)
+        r_df = pd.DataFrame(r_percent)
+        r_df.columns = prices.columns
+        year_return_df = pd.concat([year_return_df, r_df])
+    year_return_df.index = year_periods['year']
+    return year_return_df
+
+
+
+def yearly_drawdown(prices: pd.DataFrame) -> pd.DataFrame:
+    year_periods = find_year_periods(prices)
+    drawdown_df = pd.DataFrame()
+    for ix, period in year_periods.iterrows():
+        start_ix = period['start_ix']
+        end_ix = period['end_ix']
         year_df = prices[:][start_ix:end_ix+1]
-        year_drawdown = qs.stats.max_drawdown(year_df).values[0]
-        year_l.append(year)
-        drawdown_l.append(round(year_drawdown * 100, 2))
-    drawdown_df = pd.DataFrame(list(zip(year_l, drawdown_l)), columns=['year', 'drawdown'])
+        year_drawdown = qs.stats.max_drawdown(year_df)
+        year_drawdown_df = pd.DataFrame(year_drawdown).transpose()
+        drawdown_df = pd.concat([drawdown_df, year_drawdown_df])
+    drawdown_df = round(drawdown_df * 100, 2)
+    drawdown_df.index = year_periods['year']
     return drawdown_df
 
 
-drawdown_df = yearly_drawdown(plot_df)
+def build_drawdown_return(prices: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    year_return_df = yearly_return(prices)
+    drawdown_df = yearly_drawdown(prices)
+    return_cols = list()
+    for col in year_return_df.columns:
+        ret_col = f'{col} return'
+        return_cols.append(ret_col)
+    year_return_df.columns = return_cols
+    drawdown_cols = list()
+    for col in drawdown_df.columns:
+        dd_col = f'{col} drawdown'
+        drawdown_cols.append(dd_col)
+    drawdown_df.columns = drawdown_cols
+    table_df = pd.concat([year_return_df, drawdown_df], axis=1)
+    table_mean = pd.DataFrame(table_df.mean()).transpose()
+    table_mean.index = ['average']
+    return table_df, table_mean
 
+
+table_df, table_mean = build_drawdown_return(plot_df)
+print(tabulate(table_df, headers=[*table_df.columns], tablefmt='fancy_grid'))
+
+print(tabulate(table_mean, headers=[*table_mean.columns], tablefmt='fancy_grid'))
 
 print("Hi there")
