@@ -440,18 +440,22 @@ assets_collapsed = collapse_asset_df(assets_df)
 spy_only_index = spy_only_portfolio.index
 
 
-def calculate_volatility(spy_close: pd.DataFrame, portfolio: pd.DataFrame) -> pd.DataFrame:
-    spy_return = return_df(spy_close)
-    port_return = return_df(portfolio)
-    spy_volatility = round(spy_return.values.std() * sqrt(trading_days) * 100, 2)
-    port_volatility = round(port_return.values.std() * sqrt(trading_days) * 100, 2)
-    vol_df = pd.DataFrame([port_volatility, spy_volatility])
-    vol_df.columns = ['Yearly Standard Deviation (percent)']
-    vol_df.index = ['Portfolio', 'SPY']
+def calculate_volatility(prices: pd.DataFrame) -> pd.DataFrame:
+    sd_a = np.zeros(prices.shape[1])
+    for i, col in enumerate(prices.columns):
+        ts = prices[col]
+        ts_df = pd.DataFrame(ts)
+        ts_df.columns = [col]
+        ret_df = return_df(ts_df)
+        sd = float(round(ret_df.std() * sqrt(trading_days) * 100, 2))
+        sd_a[i] = sd
+    vol_df = pd.DataFrame(sd_a).transpose()
+    vol_df.columns = prices.columns
+    vol_df.index =  ['Volatility (yearly percent)']
     return vol_df
 
 
-vol_df = calculate_volatility(spy_close, spy_portfolio_df)
+vol_df = calculate_volatility(plot_df)
 
 print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
 
@@ -471,7 +475,7 @@ t_spy_close = pd.DataFrame( plot_df['SPY'])
 t_spy_close.columns = ['SPY']
 t_portfolio = pd.DataFrame( plot_df['portfolio'])
 t_portfolio.columns = ['portfolio']
-vol_df = calculate_volatility(t_spy_close, t_portfolio)
+vol_df = calculate_volatility(plot_df)
 print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
 
 
@@ -543,5 +547,7 @@ table_df, table_mean = build_drawdown_return(plot_df)
 print(tabulate(table_df, headers=[*table_df.columns], tablefmt='fancy_grid'))
 
 print(tabulate(table_mean, headers=[*table_mean.columns], tablefmt='fancy_grid'))
+
+
 
 print("Hi there")
