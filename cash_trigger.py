@@ -157,22 +157,6 @@ class SpyData:
         _average = self.spy_close.values[start_ix:end_ix+1].mean()
         return _average
 
-    def moving_sum(self, values: np.array, start_ix: int, end_ix: int, win_size: int) -> np.array:
-            sum_l: list = []
-            win_start_ix = start_ix - (win_size - 1)
-            win_end_ix = start_ix
-            sum = values[win_start_ix:win_end_ix + 1].sum()
-            win_end_ix = win_end_ix + 1
-            sum_l.append(float(sum))
-            while win_end_ix <= end_ix:
-                win_start_ix = win_end_ix - win_size
-                start_val = float(values[win_start_ix])
-                end_val = float(values[win_end_ix])
-                sum = (sum - start_val) + end_val
-                sum_l.append(sum)
-                win_end_ix = win_end_ix + 1
-            sum_a = np.array(sum_l)
-            return sum_a
 
     def moving_avg(self, start_date: datetime, end_date: datetime, window: int = window_size) -> pd.DataFrame:
         """
@@ -186,17 +170,18 @@ class SpyData:
         start_ix = findDateIndex(date_index=self.date_index, search_date=start_date)
         end_ix = findDateIndex(date_index=self.date_index, search_date=end_date)
         assert start_ix >= 0 and end_ix >= 0
-        spy_values = self.spy_close.values
-        sum_a: np.array = self.moving_sum(values=spy_values,
-                                start_ix=start_ix,
-                                end_ix=end_ix,
-                                win_size=window_size)
-        avg_a = sum_a / window_size
-        avg_df = pd.DataFrame(avg_a)
-        avg_index = self.date_index[start_ix:end_ix+1]
+        num_vals = (end_ix - start_ix) + 1
+        moving_avg_a = np.zeros(num_vals)
+        avg_index = self.date_index[start_ix:end_ix + 1]
+        for i in range(0, num_vals):
+            date_i = avg_index[i]
+            mv_avg_i = self.avg(date_i)
+            moving_avg_a[i] = mv_avg_i
+        avg_df = pd.DataFrame(moving_avg_a)
         avg_df.index = avg_index
         avg_df.columns = [f'{self.spy_etf} {window_size}-day avg']
         return avg_df
+
 
     def risk_state(self, day: datetime) -> RiskState:
         spy_avg = self.avg(day)
@@ -214,6 +199,7 @@ spy_close = spy_data.close_data(start_date, end_date)
 spy_moving_avg = spy_data.moving_avg(start_date, end_date)
 plot_df = pd.concat([spy_close, spy_moving_avg], axis=1)
 plot_df.plot(grid=True, title=f'SPY and 200-day average: {start_date.strftime("%m/%d/%Y")} - {end_date.strftime("%m/%d/%Y")}', figsize=(10,6))
+plt.show()
 
 
 def chooseAssetName(start: int, end: int, asset_set: pd.DataFrame) -> str:
