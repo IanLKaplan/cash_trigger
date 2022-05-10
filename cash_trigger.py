@@ -198,8 +198,8 @@ spy_data = SpyData(start_date, end_date)
 spy_close = spy_data.close_data(start_date, end_date)
 spy_moving_avg = spy_data.moving_avg(start_date, end_date)
 plot_df = pd.concat([spy_close, spy_moving_avg], axis=1)
-plot_df.plot(grid=True, title=f'SPY and 200-day average: {start_date.strftime("%m/%d/%Y")} - {end_date.strftime("%m/%d/%Y")}', figsize=(10,6))
-plt.show()
+# plot_df.plot(grid=True, title=f'SPY and 200-day average: {start_date.strftime("%m/%d/%Y")} - {end_date.strftime("%m/%d/%Y")}', figsize=(10,6))
+# plt.show()
 
 
 def chooseAssetName(start: int, end: int, asset_set: pd.DataFrame) -> str:
@@ -443,7 +443,7 @@ def calculate_volatility(prices: pd.DataFrame) -> pd.DataFrame:
 
 vol_df = calculate_volatility(plot_df)
 
-print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
+# print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
 
 d2010_start: datetime = datetime.fromisoformat('2010-01-04')
 d2010_spy_portfolio_df, assets_df = portfolio_return(holdings=holdings,
@@ -462,7 +462,7 @@ t_spy_close.columns = ['SPY']
 t_portfolio = pd.DataFrame( plot_df['portfolio'])
 t_portfolio.columns = ['portfolio']
 vol_df = calculate_volatility(plot_df)
-print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
+# print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
 
 
 t_port_return = return_df(spy_only_portfolio)
@@ -470,7 +470,7 @@ t_port_return = return_df(spy_only_portfolio)
 # The drawdown code only works on a Series object
 t_port_return_s = t_port_return[t_port_return.columns[0]]
 t_port_return_s.index = pd.to_datetime(t_port_return.index)
-qs.plots.drawdown( t_port_return_s, figsize=(10,8) )
+# qs.plots.drawdown( t_port_return_s, figsize=(10,8) )
 
 year_periods_df = find_year_periods(spy_only_portfolio)
 
@@ -530,9 +530,53 @@ def build_drawdown_return(prices: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFr
 
 
 table_df, table_mean = build_drawdown_return(plot_df)
-print(tabulate(table_df, headers=[*table_df.columns], tablefmt='fancy_grid'))
+# print(tabulate(table_df, headers=[*table_df.columns], tablefmt='fancy_grid'))
 
-print(tabulate(table_mean, headers=[*table_mean.columns], tablefmt='fancy_grid'))
+# print(tabulate(table_mean, headers=[*table_mean.columns], tablefmt='fancy_grid'))
+
+market_etfs = ['SOXX', 'VV', 'VO', 'VB']
+
+market_etf_file = "market_etf_adjclose"
+market_etf_adjclose = get_market_data(file_name=market_etf_file,
+                                      data_col='Adj Close',
+                                      symbols=market_etfs,
+                                      data_source=data_source,
+                                      start_date=start_date,
+                                      end_date=end_date)
+
+
+def calc_asset_portfolio(holdings: float, prices_df: pd.DataFrame, weights: np.array) -> pd.DataFrame:
+    start_balance = holdings * weights
+    portfolio_df = pd.DataFrame()
+    year_periods = find_year_periods(prices_df)
+    # columns=['start_ix', 'end_ix', 'year']
+    for ix, period in year_periods.iterrows():
+        start_ix = period['start_ix']
+        end_ix = period['end_ix']
+        year_prices_df = prices_df[:][start_ix:end_ix+1]
+        year_return = return_df(year_prices_df)
+        year_portfolio_df = pd.DataFrame([[], [], [], []]).transpose()
+        year_portfolio_df.columns = prices_df.columns
+        for jx, col in enumerate(year_prices_df.columns):
+            col_prices_a = apply_return(start_balance[jx], year_return[col])
+            year_portfolio_df[col] = pd.DataFrame(col_prices_a)
+        year_total = year_portfolio_df.tail(1).values.sum()
+        start_balance = year_total * weights
+        portfolio_df = pd.concat([portfolio_df, year_portfolio_df])
+    date_index = prices_df.index
+    portfolio_df.index = date_index
+    return portfolio_df
+
+
+
+etf_weights = np.full(market_etf_adjclose.shape[1], 0.25)
+portfolio_prices = calc_asset_portfolio(holdings=holdings, prices_df=market_etf_adjclose, weights=etf_weights)
+portfolio_sum_s = portfolio_prices.sum(axis=1)
+portfolio_sum_df = pd.DataFrame(portfolio_sum_s)
+portfolio_sum_df.columns = ['portfolio']
+plot_df = build_plot_data(holdings=holdings, portfolio_df=portfolio_sum_df, spy_df=spy_close)
+# plot_df.plot(grid=True, title='4-ETF Portfolio and SPY', figsize=(10,6))
+# plt.show()
 
 
 
