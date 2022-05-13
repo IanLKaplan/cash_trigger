@@ -320,16 +320,16 @@ def portfolio_return(holdings: float,
         start_ix = period['start_ix']
         end_ix = period['end_ix']
         period_start_date: datetime = convert_date(period['start_date'])
+        close_prices = pd.DataFrame()
         r_df = pd.DataFrame()
         asset_name = ''
         if spy_data.risk_state(period_start_date) == RiskState.RISK_ON:
             asset_name: str = chooseAssetName(start_ix, end_ix, risk_asset)
-            risk_close_prices = pd.DataFrame(risk_asset[asset_name][start_ix:end_ix+1])
-            r_df = return_df(risk_close_prices)
+            close_prices = pd.DataFrame(risk_asset[asset_name][start_ix:end_ix+1])
         else: # RISK_OFF - bonds
             asset_name: str = chooseAssetName(start_ix, end_ix, bond_asset)
-            bond_close_prices = pd.DataFrame(bond_asset[asset_name][start_ix:end_ix+1])
-            r_df = return_df(bond_close_prices)
+            close_prices = pd.DataFrame(bond_asset[asset_name][start_ix:end_ix+1])
+        r_df = return_df(close_prices)
         name_l.append(asset_name)
         date_l.append(period['start_date'])
         port_month_a = apply_return(portfolio_val, r_df)
@@ -400,6 +400,19 @@ cash_trigger_bond_adjclose = get_market_data(file_name=cash_trigger_bond_file,
                                              data_source=data_source,
                                              start_date=start_date,
                                              end_date=end_date)
+
+shy_file = "shy_adjclose"
+shy_ticker = 'SHY'
+shy_sym = [shy_ticker]
+shy_adjclose = get_market_data(file_name=shy_file,
+                               data_col='Adj Close',
+                               symbols=shy_sym,
+                               data_source=data_source,
+                               start_date=start_date,
+                               end_date=end_date)
+
+# Add SHY to the bond set
+cash_trigger_bond_adjclose[shy_ticker] = shy_adjclose
 
 spy_portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                                risk_asset=spy_close,
@@ -578,6 +591,45 @@ plot_df = build_plot_data(holdings=holdings, portfolio_df=portfolio_sum_df, spy_
 # plot_df.plot(grid=True, title='4-ETF Portfolio and SPY', figsize=(10,6))
 # plt.show()
 
+def percent_return_df(start_date: datetime, end_date: datetime, prices_df: pd.DataFrame) -> pd.DataFrame:
+    def percent_return(time_series: pd.Series) -> pd.Series:
+        return list(((time_series[i] / time_series[0]) - 1.0 for i in range(0, len(time_series))))
+
+
+    date_index = prices_df.index
+    start_ix = findDateIndex(date_index, start_date)
+    end_ix = findDateIndex(date_index, end_date)
+    period_df = prices_df[:][start_ix:end_ix+1]
+    period_return_df = pd.DataFrame()
+    for col in period_df.columns:
+        return_series = percent_return(period_df[col])
+        period_return_df[col] = return_series
+    period_return_df.index = period_df.index
+    return_percent_df = round(period_return_df * 100, 2)
+    return return_percent_df
+
+rotation_etfs = ['IWM', 'MDY', 'QQQ']
+rotation_etf_file = 'rotation_etf_close'
+rotation_etf_close = get_market_data(file_name=rotation_etf_file,
+                                      data_col='Close',
+                                      symbols=rotation_etfs,
+                                      data_source=data_source,
+                                      start_date=start_date,
+                                      end_date=end_date)
+
+rotation_etf_close[shy_ticker] = shy_adjclose
+
+percent_ret = percent_return_df(start_date=start_date, end_date=end_date, prices_df=rotation_etf_close)
+
+etf_rotation_portfolio_df, t = portfolio_return(holdings=holdings,
+                                               risk_asset=rotation_etf_close,
+                                               bond_asset=cash_trigger_bond_adjclose,
+                                               spy_data=spy_data,
+                                               start_date=start_date,
+                                               end_date=end_date
+                                               )
+
+plot_df = build_plot_data(holdings=holdings, portfolio_df=etf_rotation_portfolio_df, spy_df=spy_close)
 
 
 print("Hi there")
