@@ -346,7 +346,7 @@ def portfolio_return(holdings: float,
     portfolio_index = date_index[start_ix:end_ix + 1]
     portfolio_df.index = portfolio_index
     assets_df = pd.DataFrame(name_l)
-    assets_df.columns = ['assets']
+    assets_df.columns = ['asset']
     assets_df.index = date_l
     return portfolio_df, assets_df
 
@@ -371,23 +371,17 @@ def build_plot_data(holdings: float, portfolio_df: pd.DataFrame, spy_df: pd.Data
 
 
 def collapse_asset_df(asset_df: pd.DataFrame) -> pd.DataFrame:
-    date_l: List = []
-    asset_l: List = []
-    current_date = convert_date(asset_df.index[0])
-    date_l.append(current_date)
-    cur_asset = asset_df.values[0][0]
-    asset_l.append(cur_asset)
+    row = asset_df[0:1]
+    cur_asset = row['asset'][0]
+    collapse_df = pd.DataFrame(row)
     for index in range(1, asset_df.shape[0]):
         row = asset_df[:][index:index+1]
-        row_name = row.values[0][0]
-        row_date = convert_date(row.index[0])
+        row_name = row['asset'][0]
         if row_name != cur_asset:
-            date_l.append(row_date)
-            asset_l.append(row_name)
+            collapse_df = pd.concat([collapse_df, row])
             cur_asset = row_name
-    collapse_df = pd.DataFrame(asset_l)
-    collapse_df.index = date_l
-    collapse_df.columns = ['asset']
+    if collapse_df.tail(1).index[0] != asset_df.tail(1).index[0]:
+        collapse_df = pd.concat([collapse_df, asset_df.tail(1)])
     return collapse_df
 
 
@@ -559,6 +553,14 @@ market_etf_adjclose = get_market_data(file_name=market_etf_file,
 
 
 def calc_asset_portfolio(holdings: float, prices_df: pd.DataFrame, weights: np.array) -> pd.DataFrame:
+    """
+    Given a set of assets in prices_df and weights, calculate a portfolio price series based on the
+    weighted assets.  The portfolio is rebalanced once a year.
+    :param holdings:
+    :param prices_df:
+    :param weights:
+    :return:
+    """
     start_balance = holdings * weights
     portfolio_df = pd.DataFrame()
     year_periods = find_year_periods(prices_df)
@@ -617,12 +619,17 @@ rotation_etf_close = get_market_data(file_name=rotation_etf_file,
                                       start_date=start_date,
                                       end_date=end_date)
 
-rotation_etf_close[shy_ticker] = shy_adjclose
+# SPY has already been downloaded. So add SPY to the rotation_etf_close set.
+rotation_etf_close['SPY'] = spy_close
+
+# Add SHY (the cash proxy bond) to the ETF rotation set.
+rotation_etf_shy = rotation_etf_close.copy()
+rotation_etf_shy[shy_ticker] = shy_adjclose
 
 percent_ret = percent_return_df(start_date=start_date, end_date=end_date, prices_df=rotation_etf_close)
 
 etf_rotation_portfolio_df, t = portfolio_return(holdings=holdings,
-                                               risk_asset=rotation_etf_close,
+                                               risk_asset=rotation_etf_shy,
                                                bond_asset=cash_trigger_bond_adjclose,
                                                spy_data=spy_data,
                                                start_date=start_date,
@@ -630,6 +637,88 @@ etf_rotation_portfolio_df, t = portfolio_return(holdings=holdings,
                                                )
 
 plot_df = build_plot_data(holdings=holdings, portfolio_df=etf_rotation_portfolio_df, spy_df=spy_close)
+
+
+def get_asset_investments(risk_asset: pd.DataFrame,
+                          bond_asset: pd.DataFrame,
+                          spy_data: SpyData,
+                          start_date: datetime,
+                          end_date: datetime) -> pd.DataFrame:
+    name_l: List = []
+    risk_l: List = []
+    date_l: List = []
+    end_date_l: List = []
+    month_periods = find_month_periods(start_date, end_date, risk_asset)
+    for index, period in month_periods.iterrows():
+        start_ix = period['start_ix']
+        end_ix = period['end_ix']
+        period_start_date: datetime = convert_date(period['start_date'])
+        period_end_date: datetime = convert_date(period['end_date'])
+        date_l.append(period_start_date)
+        end_date_l.append(period_end_date)
+        asset_name = ''
+        if spy_data.risk_state(period_start_date) == RiskState.RISK_ON:
+            asset_name: str = chooseAssetName(start_ix, end_ix, risk_asset)
+            risk_on: bool = True
+        else:  # RISK_OFF - bonds
+            asset_name: str = chooseAssetName(start_ix, end_ix, bond_asset)
+            risk_on: bool = False
+        name_l.append(asset_name)
+        risk_l.append(risk_on)
+    asset_df = pd.DataFrame([name_l, date_l, end_date_l, risk_l]).transpose()
+    asset_df.index = date_l
+    asset_df.columns = ['asset', 'start_date', 'end_date', 'risk-on']
+    asset_df = collapse_asset_df(asset_df=asset_df)
+    return asset_df
+
+
+def investment_return(holdings: float, investment_df: pd.DataFrame, prices_df: pd.DataFrame) -> pd.DataFrame:
+    date_index = prices_df.index
+    date_l: List = []
+    prices_l: List = []
+    balance = holdings
+    first = True
+    for ix, row in investment_df.iterrows():
+        start_date = row['start_date']
+        end_date = row['end_date']
+        if first:
+            prices_l.append(balance)
+            date_l.append(start_date)
+            first = False
+        asset = row['asset']
+        start_ix = findDateIndex(date_index, start_date)
+        end_ix = findDateIndex(date_index, end_date)
+        assert start_ix >= 0 and end_ix >= 0
+        period_prices_df = prices_df[asset][start_ix:end_ix+1]
+        row_one = prices_df[asset][start_ix:start_ix+1]
+        row_n = prices_df[asset][end_ix:end_ix+1]
+        r = (row_n.values[0] / row_one.values[0]) -1
+        balance = balance + balance * r
+        prices_l.append(balance)
+        date_l.append(end_date)
+    portfolio_df = pd.DataFrame(prices_l)
+    portfolio_df.index = date_l
+    portfolio_df.columns = ['portfolio']
+    return portfolio_df
+
+
+
+asset_df = get_asset_investments(risk_asset=rotation_etf_shy,
+                                 bond_asset=cash_trigger_bond_adjclose,
+                                 spy_data=spy_data,
+                                 start_date=start_date,
+                                 end_date=end_date
+                                 )
+
+all_assets = pd.concat([rotation_etf_close, cash_trigger_bond_adjclose], axis=1)
+
+new_portfolio_df = investment_return(holdings=holdings, investment_df=asset_df, prices_df=all_assets)
+
+# plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
+# plot_df.plot(grid=True, title='4-ETF Portfolio and SPY', figsize=(10,6))
+
+new_portfolio_df.plot(grid=True, logy=True, figsize=(10,6))
+plt.show()
 
 
 print("Hi there")
