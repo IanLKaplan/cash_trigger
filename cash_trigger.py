@@ -818,8 +818,15 @@ def investment_return(holdings: float, investment_df: pd.DataFrame, prices_df: p
         assert start_ix >= 0 and end_ix >= 0
         row_one = prices_df[asset][start_ix:start_ix+1]
         row_n = prices_df[asset][end_ix:end_ix+1]
-        r = (row_n.values[0] / row_one.values[0]) -1
-        balance = balance + balance * r
+        value_n = row_n.values[0]
+        value_1 = row_one.values[0]
+        r = (value_n / value_1) -1
+        # we can only buy whole shares
+        num_shares = balance // value_1
+        equity_balance = num_shares * value_1
+        cash_balance = balance - equity_balance
+        equity_return = equity_balance + equity_balance * r
+        balance = equity_return + cash_balance
         prices_l.append(balance)
         date_l.append(end_date)
     portfolio_df = pd.DataFrame(prices_l)
