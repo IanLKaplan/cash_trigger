@@ -1,15 +1,18 @@
 
-from datetime import datetime, timedelta
 from enum import Enum
 
+from IPython.core.display import Image
+from dateutil.relativedelta import relativedelta
 from numpy import sqrt
+
+
+from datetime import datetime, timedelta
 from tabulate import tabulate
 from typing import List, Tuple
 from pandas_datareader import data
 import matplotlib.pyplot as plt
 import pandas as pd
 from pandas.core.indexes.datetimes import DatetimeIndex
-from dateutil.relativedelta import relativedelta
 import numpy as np
 from pathlib import Path
 import tempfile
@@ -19,7 +22,6 @@ import tempfile
 # # https://github.com/ranaroussi/quantstats
 # pip install QuantStats
 import quantstats as qs
-
 
 plt.style.use('seaborn-whitegrid')
 pd.options.mode.chained_assignment = 'raise'
@@ -63,10 +65,11 @@ def get_market_data(file_name: str,
     assert len(close_data) > 0, f'Error reading data for {symbols}'
     return close_data
 
-window_size = 200
 
 trading_days = 252
 trading_quarter = trading_days // 4
+
+window_size = 200
 
 data_source = 'yahoo'
 
@@ -195,11 +198,10 @@ class SpyData:
 
 
 spy_data = SpyData(start_date, end_date)
+
 spy_close = spy_data.close_data(start_date, end_date)
 spy_moving_avg = spy_data.moving_avg(start_date, end_date)
 plot_df = pd.concat([spy_close, spy_moving_avg], axis=1)
-# plot_df.plot(grid=True, title=f'SPY and 200-day average: {start_date.strftime("%m/%d/%Y")} - {end_date.strftime("%m/%d/%Y")}', figsize=(10,6))
-# plt.show()
 
 
 def chooseAssetName(start: int, end: int, asset_set: pd.DataFrame) -> str:
@@ -280,7 +282,6 @@ def find_year_periods(data: pd.DataFrame) -> pd.DataFrame:
     return periods_df
 
 
-
 def simple_return(time_series: np.array, period: int = 1) -> List :
     return list(((time_series[i]/time_series[i-period]) - 1.0 for i in range(period, len(time_series), period)))
 
@@ -320,16 +321,16 @@ def portfolio_return(holdings: float,
         start_ix = period['start_ix']
         end_ix = period['end_ix']
         period_start_date: datetime = convert_date(period['start_date'])
-        close_prices = pd.DataFrame()
         r_df = pd.DataFrame()
         asset_name = ''
         if spy_data.risk_state(period_start_date) == RiskState.RISK_ON:
             asset_name: str = chooseAssetName(start_ix, end_ix, risk_asset)
-            close_prices = pd.DataFrame(risk_asset[asset_name][start_ix:end_ix+1])
+            risk_close_prices = pd.DataFrame(risk_asset[asset_name][start_ix:end_ix+1])
+            r_df = return_df(risk_close_prices)
         else: # RISK_OFF - bonds
             asset_name: str = chooseAssetName(start_ix, end_ix, bond_asset)
-            close_prices = pd.DataFrame(bond_asset[asset_name][start_ix:end_ix+1])
-        r_df = return_df(close_prices)
+            bond_close_prices = pd.DataFrame(bond_asset[asset_name][start_ix:end_ix+1])
+            r_df = return_df(bond_close_prices)
         name_l.append(asset_name)
         date_l.append(period['start_date'])
         port_month_a = apply_return(portfolio_val, r_df)
@@ -387,6 +388,18 @@ def build_plot_data(holdings: float, portfolio_df: pd.DataFrame, spy_df: pd.Data
     return plot_df
 
 
+spy_start_val = float(spy_close[:].values[0])
+spy_only_portfolio, t = portfolio_return(holdings=spy_start_val,
+                                         risk_asset=spy_close,
+                                         bond_asset=spy_close,
+                                         spy_data=spy_data,
+                                         start_date=start_date,
+                                         end_date=end_date)
+
+plot_df = build_plot_data(holdings=spy_start_val, portfolio_df=spy_only_portfolio, spy_df=spy_close)
+plot_df.plot(grid=True, title='SPY as the only portfolio asset and SPY', figsize=(10,6))
+
+
 def collapse_asset_df(asset_df: pd.DataFrame) -> pd.DataFrame:
     row = asset_df[0:1]
     cur_asset = row['asset'][0]
@@ -433,21 +446,13 @@ spy_portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                                end_date=end_date
                                                )
 
+
 plot_df = build_plot_data(holdings=holdings, portfolio_df=spy_portfolio_df, spy_df=spy_close)
 
-spy_start_val = float(spy_close[:].values[0])
-spy_only_portfolio, assets_df = portfolio_return(holdings=spy_start_val,
-                                         risk_asset=spy_close,
-                                         bond_asset=spy_close,
-                                         spy_data=spy_data,
-                                         start_date=start_date,
-                                         end_date=end_date)
 
-plot_df = build_plot_data(holdings=spy_start_val, portfolio_df=spy_only_portfolio, spy_df=spy_close)
+assets_collapsed_df = collapse_asset_df(assets_df)
 
-assets_collapsed = collapse_asset_df(assets_df)
-
-spy_only_index = spy_only_portfolio.index
+# print(tabulate(assets_collapsed_df, headers=[*assets_collapsed_df.columns], tablefmt='fancy_grid'))
 
 
 def calculate_volatility(prices: pd.DataFrame) -> pd.DataFrame:
@@ -467,42 +472,15 @@ def calculate_volatility(prices: pd.DataFrame) -> pd.DataFrame:
 
 vol_df = calculate_volatility(plot_df)
 
-# print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
-
-d2010_start: datetime = datetime.fromisoformat('2010-01-04')
-d2010_spy_portfolio_df, assets_df = portfolio_return(holdings=holdings,
-                                               risk_asset=spy_close,
-                                               bond_asset=cash_trigger_bond_adjclose,
-                                               spy_data=spy_data,
-                                               start_date=d2010_start,
-                                               end_date=end_date
-                                               )
-
-
-plot_df = build_plot_data(holdings=holdings, portfolio_df=d2010_spy_portfolio_df, spy_df=spy_close)
-
-
-t_spy_close = pd.DataFrame( plot_df['SPY'])
-t_spy_close.columns = ['SPY']
-t_portfolio = pd.DataFrame( plot_df['portfolio'])
-t_portfolio.columns = ['portfolio']
-vol_df = calculate_volatility(plot_df)
-# print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
-
-
-t_port_return = return_df(spy_only_portfolio)
-
-# The drawdown code only works on a Series object
-t_port_return_s = t_port_return[t_port_return.columns[0]]
-t_port_return_s.index = pd.to_datetime(t_port_return.index)
-# qs.plots.drawdown( t_port_return_s, figsize=(10,8) )
-
-year_periods_df = find_year_periods(spy_only_portfolio)
-
-max_drawdown = qs.stats.max_drawdown(spy_only_portfolio)
 
 
 def yearly_return(prices: pd.DataFrame) -> pd.DataFrame:
+    """
+    The yearly return is the return if the asset where purchased on the
+    first trading day and sold on the last trading day.
+    :param prices: the asset prices for the time period.
+    :return: a DataFrame containing the yearly returns for the asset.
+    """
     year_periods = find_year_periods(prices)
     year_return_df = pd.DataFrame()
     for ix, period in year_periods.iterrows():
@@ -517,7 +495,6 @@ def yearly_return(prices: pd.DataFrame) -> pd.DataFrame:
         year_return_df = pd.concat([year_return_df, r_df])
     year_return_df.index = year_periods['year']
     return year_return_df
-
 
 
 def yearly_drawdown(prices: pd.DataFrame) -> pd.DataFrame:
@@ -555,9 +532,102 @@ def build_drawdown_return(prices: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFr
 
 
 table_df, table_mean = build_drawdown_return(plot_df)
+
+
+d2010_start: datetime = datetime.fromisoformat('2010-01-04')
+
+d2010_spy_close = spy_data.close_data(d2010_start, end_date)
+d2010_moving_avg = spy_data.moving_avg(d2010_start, end_date)
+plot_df = pd.concat([d2010_spy_close, d2010_moving_avg], axis=1)
+
+
+plot_df.plot(grid=True, title=f'Moving average and SPY from {d2010_start.strftime("%m/%d/%Y")}', figsize=(10,6))
+
+
+d2010_start: datetime = datetime.fromisoformat('2010-01-04')
+d2010_spy_portfolio_df, assets_df = portfolio_return(holdings=holdings,
+                                               risk_asset=spy_close,
+                                               bond_asset=cash_trigger_bond_adjclose,
+                                               spy_data=spy_data,
+                                               start_date=d2010_start,
+                                               end_date=end_date
+                                               )
+
+plot_df = build_plot_data(holdings=holdings, portfolio_df=d2010_spy_portfolio_df, spy_df=spy_close)
+plot_df.plot(grid=True, title='SPY Portfolio from 2010 and SPY', figsize=(10,6))
+
+vol_df = calculate_volatility(plot_df)
+
+# print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
+
+table_df, table_mean = build_drawdown_return(plot_df)
+
+
+d5_year_start = end_date - relativedelta(years=5)
+d5_spy_close = spy_data.close_data(d5_year_start, end_date)
+d5_moving_avg = spy_data.moving_avg(d5_year_start, end_date)
+plot_df = pd.concat([d5_spy_close, d5_moving_avg], axis=1)
+
+plot_df.plot(grid=True, title=f'Moving average and SPY from {d5_year_start.strftime("%m/%d/%Y")}', figsize=(10,6))
+
+five_year_spy_portfolio_df, t = portfolio_return(holdings=holdings,
+                                               risk_asset=spy_close,
+                                               bond_asset=cash_trigger_bond_adjclose,
+                                               spy_data=spy_data,
+                                               start_date=d5_year_start,
+                                               end_date=end_date
+                                               )
+
+plot_df = build_plot_data(holdings=holdings, portfolio_df=five_year_spy_portfolio_df, spy_df=spy_close)
+
+vol_df = calculate_volatility(plot_df)
+# print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
+
+table_df, table_mean = build_drawdown_return(plot_df)
 # print(tabulate(table_df, headers=[*table_df.columns], tablefmt='fancy_grid'))
 
 # print(tabulate(table_mean, headers=[*table_mean.columns], tablefmt='fancy_grid'))
+
+
+d3_year_start = end_date - relativedelta(years=3)
+
+d3_spy_close = spy_data.close_data(d3_year_start, end_date)
+d3_moving_avg = spy_data.moving_avg(d3_year_start, end_date)
+plot_df = pd.concat([d3_spy_close, d3_moving_avg], axis=1)
+
+plot_df.plot(grid=True, title=f'Moving average and SPY from {d3_year_start.strftime("%m/%d/%Y")}', figsize=(10,6))
+
+
+three_year_spy_portfolio_df, t = portfolio_return(holdings=holdings,
+                                               risk_asset=spy_close,
+                                               bond_asset=cash_trigger_bond_adjclose,
+                                               spy_data=spy_data,
+                                               start_date=d3_year_start,
+                                               end_date=end_date
+                                               )
+
+plot_df = build_plot_data(holdings=holdings, portfolio_df=three_year_spy_portfolio_df, spy_df=spy_close)
+
+
+d1_year_start = end_date - relativedelta(years=1)
+
+d1_spy_close = spy_data.close_data(d1_year_start, end_date)
+d1_moving_avg = spy_data.moving_avg(d1_year_start, end_date)
+plot_df = pd.concat([d1_spy_close, d1_moving_avg], axis=1)
+
+plot_df.plot(grid=True, title=f'Moving average and SPY from {d1_year_start.strftime("%m/%d/%Y")}', figsize=(10,6))
+
+
+one_year_spy_portfolio_df, t = portfolio_return(holdings=holdings,
+                                               risk_asset=spy_close,
+                                               bond_asset=cash_trigger_bond_adjclose,
+                                               spy_data=spy_data,
+                                               start_date=d1_year_start,
+                                               end_date=end_date
+                                               )
+
+plot_df = build_plot_data(holdings=holdings, portfolio_df=one_year_spy_portfolio_df, spy_df=spy_close)
+
 
 market_etfs = ['SOXX', 'VV', 'VO', 'VB']
 
@@ -572,12 +642,16 @@ market_etf_adjclose = get_market_data(file_name=market_etf_file,
 
 def calc_asset_portfolio(holdings: float, prices_df: pd.DataFrame, weights: np.array) -> pd.DataFrame:
     """
-    Given a set of assets in prices_df and weights, calculate a portfolio price series based on the
-    weighted assets.  The portfolio is rebalanced once a year.
-    :param holdings:
-    :param prices_df:
-    :param weights:
-    :return:
+     Given a set of asset prices and weights, return a DataFrame where each column contains
+     a price series for the asset, starting with a weighted portfolio investment. For example,
+     if the weights are [0.25, 0.25, 0.25, 0.25] and the initial holding is 100,000 the
+     initial prices series will be the returns for each asset applied to 25,000. The
+     portfolio will be rebalanced every year, so the weights will be approximately
+     maintained.
+    :param holdings: the initial value invested in the portfolio
+    :param prices_df: a DataFrame containing a price series for the portfolio assets
+    :param weights: The weights for the various assets
+    :return: The prices series for the yearly rebalanced assets.
     """
     start_balance = holdings * weights
     portfolio_df = pd.DataFrame()
@@ -594,6 +668,7 @@ def calc_asset_portfolio(holdings: float, prices_df: pd.DataFrame, weights: np.a
             col_prices_a = apply_return(start_balance[jx], year_return[col])
             year_portfolio_df[col] = pd.DataFrame(col_prices_a)
         year_total = year_portfolio_df.tail(1).values.sum()
+        # rebalanced every year
         start_balance = year_total * weights
         portfolio_df = pd.concat([portfolio_df, year_portfolio_df])
     date_index = prices_df.index
@@ -608,8 +683,28 @@ portfolio_sum_s = portfolio_prices.sum(axis=1)
 portfolio_sum_df = pd.DataFrame(portfolio_sum_s)
 portfolio_sum_df.columns = ['portfolio']
 plot_df = build_plot_data(holdings=holdings, portfolio_df=portfolio_sum_df, spy_df=spy_close)
-# plot_df.plot(grid=True, title='4-ETF Portfolio and SPY', figsize=(10,6))
-# plt.show()
+
+
+four_etf_portfolio_df, t = portfolio_return(holdings=holdings,
+                                               risk_asset=portfolio_sum_df,
+                                               bond_asset=cash_trigger_bond_adjclose,
+                                               spy_data=spy_data,
+                                               start_date=start_date,
+                                               end_date=end_date
+                                               )
+
+plot_df = build_plot_data(holdings=holdings, portfolio_df=four_etf_portfolio_df, spy_df=spy_close)
+
+five_year_etf_portfolio_df, t = portfolio_return(holdings=holdings,
+                                               risk_asset=portfolio_sum_df,
+                                               bond_asset=cash_trigger_bond_adjclose,
+                                               spy_data=spy_data,
+                                               start_date=d5_year_start,
+                                               end_date=end_date
+                                               )
+
+plot_df = build_plot_data(holdings=holdings, portfolio_df=five_year_etf_portfolio_df, spy_df=spy_close)
+
 
 def percent_return_df(start_date: datetime, end_date: datetime, prices_df: pd.DataFrame) -> pd.DataFrame:
     def percent_return(time_series: pd.Series) -> pd.Series:
@@ -628,6 +723,11 @@ def percent_return_df(start_date: datetime, end_date: datetime, prices_df: pd.Da
     return_percent_df = round(period_return_df * 100, 2)
     return return_percent_df
 
+
+# We already have the bond set JNK, TLT, MUB or SHYin the DataFrame cash_trigger_bond_adjclose
+# We already have SPY close prices. For consistency we'll use close prices, instead of
+# adjusted close prices for IWM, MDY and QQQ.
+
 rotation_etfs = ['IWM', 'MDY', 'QQQ']
 rotation_etf_file = 'rotation_etf_close'
 rotation_etf_close = get_market_data(file_name=rotation_etf_file,
@@ -639,12 +739,16 @@ rotation_etf_close = get_market_data(file_name=rotation_etf_file,
 
 # SPY has already been downloaded. So add SPY to the rotation_etf_close set.
 rotation_etf_close['SPY'] = spy_close
-
 # Add SHY (the cash proxy bond) to the ETF rotation set.
 rotation_etf_shy = rotation_etf_close.copy()
 rotation_etf_shy[shy_ticker] = shy_adjclose
 
-percent_ret = percent_return_df(start_date=start_date, end_date=end_date, prices_df=rotation_etf_close)
+
+percent_ret = percent_return_df(start_date=start_date,
+                                end_date=end_date,
+                                prices_df=rotation_etf_close)
+percent_ret.plot(grid=True, title='Percent return for the ETF Rotation set', figsize=(10,6))
+
 
 etf_rotation_portfolio_df, t = portfolio_return(holdings=holdings,
                                                risk_asset=rotation_etf_shy,
@@ -654,12 +758,12 @@ etf_rotation_portfolio_df, t = portfolio_return(holdings=holdings,
                                                end_date=end_date
                                                )
 
-plot_df = build_plot_data(holdings=holdings, portfolio_df=etf_rotation_portfolio_df, spy_df=spy_close)
+plot_df = build_plot_data(holdings=holdings,
+                          portfolio_df=etf_rotation_portfolio_df,
+                          spy_df=spy_close)
 
 terminal_vals_s = plot_df[:].iloc[-1]
 terminal_vals_df = pd.DataFrame(terminal_vals_s).transpose()
-print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='fancy_grid', floatfmt=".0f"))
-
 
 
 def get_asset_investments(risk_asset: pd.DataFrame,
@@ -724,7 +828,6 @@ def investment_return(holdings: float, investment_df: pd.DataFrame, prices_df: p
     return portfolio_df
 
 
-
 asset_df = get_asset_investments(risk_asset=rotation_etf_shy,
                                  bond_asset=cash_trigger_bond_adjclose,
                                  spy_data=spy_data,
@@ -734,14 +837,15 @@ asset_df = get_asset_investments(risk_asset=rotation_etf_shy,
 
 all_assets = pd.concat([rotation_etf_close, cash_trigger_bond_adjclose], axis=1)
 
-new_portfolio_df = investment_return(holdings=holdings, investment_df=asset_df, prices_df=all_assets)
+new_portfolio_df = investment_return(holdings=holdings,
+                                     investment_df=asset_df,
+                                     prices_df=all_assets)
 
 new_portfolio_adj_df, spy_period_adj = adjust_time_series(new_portfolio_df, spy_close)
 
 plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_adj_df, spy_df=spy_period_adj)
-plot_df.plot(grid=True, title='New Portfolio and SPY', figsize=(10,6))
 
-plt.show()
+
 
 
 print("Hi there")
