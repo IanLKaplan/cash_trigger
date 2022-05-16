@@ -351,6 +351,23 @@ def portfolio_return(holdings: float,
     return portfolio_df, assets_df
 
 
+def adjust_time_series(ts_one_df: pd.DataFrame, ts_two_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Adjust two DataFrame time series with overlapping date indices so that they
+    are the same length with the same date indices.
+    """
+    ts_one_index = pd.to_datetime(ts_one_df.index)
+    ts_two_index = pd.to_datetime(ts_two_df.index)
+        # filter the close prices
+    matching_dates = ts_one_index.isin( ts_two_index )
+    ts_one_adj = ts_one_df[matching_dates]
+    # filter the rf_prices
+    ts_one_index = pd.to_datetime(ts_one_adj.index)
+    matching_dates = ts_two_index.isin(ts_one_index)
+    ts_two_adj = ts_two_df[matching_dates]
+    return ts_one_adj, ts_two_adj
+
+
 def build_plot_data(holdings: float, portfolio_df: pd.DataFrame, spy_df: pd.DataFrame) -> pd.DataFrame:
     port_start_date = portfolio_df.index[0]
     port_start_date = convert_date(port_start_date)
@@ -364,7 +381,7 @@ def build_plot_data(holdings: float, portfolio_df: pd.DataFrame, spy_df: pd.Data
     spy_return_a = apply_return(start_val=holdings, return_df=spy_return)
     spy_port = pd.DataFrame(spy_return_a)
     spy_port.columns = ['SPY']
-    spy_port.index = spy_df.index
+    spy_port.index = pd.to_datetime(spy_df.index)
     plot_df = portfolio_df.copy()
     plot_df['SPY'] = spy_port
     return plot_df
@@ -460,6 +477,7 @@ d2010_spy_portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                                start_date=d2010_start,
                                                end_date=end_date
                                                )
+
 
 plot_df = build_plot_data(holdings=holdings, portfolio_df=d2010_spy_portfolio_df, spy_df=spy_close)
 
@@ -638,6 +656,11 @@ etf_rotation_portfolio_df, t = portfolio_return(holdings=holdings,
 
 plot_df = build_plot_data(holdings=holdings, portfolio_df=etf_rotation_portfolio_df, spy_df=spy_close)
 
+terminal_vals_s = plot_df[:].iloc[-1]
+terminal_vals_df = pd.DataFrame(terminal_vals_s).transpose()
+print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='fancy_grid', floatfmt=".0f"))
+
+
 
 def get_asset_investments(risk_asset: pd.DataFrame,
                           bond_asset: pd.DataFrame,
@@ -689,7 +712,6 @@ def investment_return(holdings: float, investment_df: pd.DataFrame, prices_df: p
         start_ix = findDateIndex(date_index, start_date)
         end_ix = findDateIndex(date_index, end_date)
         assert start_ix >= 0 and end_ix >= 0
-        period_prices_df = prices_df[asset][start_ix:end_ix+1]
         row_one = prices_df[asset][start_ix:start_ix+1]
         row_n = prices_df[asset][end_ix:end_ix+1]
         r = (row_n.values[0] / row_one.values[0]) -1
@@ -714,10 +736,11 @@ all_assets = pd.concat([rotation_etf_close, cash_trigger_bond_adjclose], axis=1)
 
 new_portfolio_df = investment_return(holdings=holdings, investment_df=asset_df, prices_df=all_assets)
 
-# plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
-# plot_df.plot(grid=True, title='4-ETF Portfolio and SPY', figsize=(10,6))
+new_portfolio_adj_df, spy_period_adj = adjust_time_series(new_portfolio_df, spy_close)
 
-new_portfolio_df.plot(grid=True, logy=True, figsize=(10,6))
+plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_adj_df, spy_df=spy_period_adj)
+plot_df.plot(grid=True, title='New Portfolio and SPY', figsize=(10,6))
+
 plt.show()
 
 
