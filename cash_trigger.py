@@ -1659,7 +1659,7 @@ rotation_etf_shy[shy_ticker] = shy_adjclose
 percent_ret = percent_return_df(start_date=start_date,
                                 end_date=end_date,
                                 prices_df=rotation_etf_close)
-percent_ret.plot(grid=True, title='Percent return for the ETF Rotation set', figsize=(10,6))
+# percent_ret.plot(grid=True, title='Percent return for the ETF Rotation set', figsize=(10,6))
 
 
 etf_rotation_portfolio_df, unused = portfolio_return(holdings=holdings,
@@ -1917,15 +1917,16 @@ def portfolio_return_by_period(holdings: float,
     portfolio_df = investment_return(holdings=holdings,
                                      investment_df=asset_df,
                                      prices_df=all_assets)
-    return portfolio_df, assets_df
+    return portfolio_df, asset_df
 
 
-new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
-                                 bond_asset=cash_trigger_bond_adjclose,
-                                 spy_data=spy_data,
-                                 start_date=start_date,
-                                 end_date=end_date
-                                 )
+new_portfolio_df, asset_df = portfolio_return_by_period(holdings=holdings,
+                                                        risk_asset=rotation_etf_shy,
+                                                        bond_asset=cash_trigger_bond_adjclose,
+                                                        spy_data=spy_data,
+                                                        start_date=start_date,
+                                                        end_date=end_date
+                                                        )
 
 plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
@@ -1973,12 +1974,13 @@ print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='
 
 d10_year_start = end_date - relativedelta(years=10)
 
-new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
-                                 bond_asset=cash_trigger_bond_adjclose,
-                                 spy_data=spy_data,
-                                 start_date=d10_year_start,
-                                 end_date=end_date
-                                 )
+new_portfolio_df, asset_df = portfolio_return_by_period(holdings=holdings,
+                                                        risk_asset=rotation_etf_shy,
+                                                        bond_asset=cash_trigger_bond_adjclose,
+                                                        spy_data=spy_data,
+                                                        start_date=d10_year_start,
+                                                        end_date=end_date
+                                                        )
 
 plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
@@ -2005,12 +2007,13 @@ terminal_vals_df = pd.DataFrame(terminal_vals_s).transpose()
 print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='fancy_grid', floatfmt=".0f"))
 
 
-new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
-                                 bond_asset=cash_trigger_bond_adjclose,
-                                 spy_data=spy_data,
-                                 start_date=d5_year_start,
-                                 end_date=end_date
-                                 )
+new_portfolio_df, asset_df = portfolio_return_by_period(holdings=holdings,
+                                                        risk_asset=rotation_etf_shy,
+                                                        bond_asset=cash_trigger_bond_adjclose,
+                                                        spy_data=spy_data,
+                                                        start_date=d5_year_start,
+                                                        end_date=end_date
+                                                        )
 
 plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
@@ -2037,12 +2040,13 @@ terminal_vals_df = pd.DataFrame(terminal_vals_s).transpose()
 print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='fancy_grid', floatfmt=".0f"))
 
 
-new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
-                                 bond_asset=cash_trigger_bond_adjclose,
-                                 spy_data=spy_data,
-                                 start_date=d3_year_start,
-                                 end_date=end_date
-                                 )
+new_portfolio_df, asset_df = portfolio_return_by_period(holdings=holdings,
+                                                        risk_asset=rotation_etf_shy,
+                                                        bond_asset=cash_trigger_bond_adjclose,
+                                                        spy_data=spy_data,
+                                                        start_date=d3_year_start,
+                                                        end_date=end_date
+                                                        )
 
 plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
@@ -2069,12 +2073,13 @@ terminal_vals_df = pd.DataFrame(terminal_vals_s).transpose()
 print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='fancy_grid', floatfmt=".0f"))
 
 
-new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
-                                 bond_asset=cash_trigger_bond_adjclose,
-                                 spy_data=spy_data,
-                                 start_date=d1_year_start,
-                                 end_date=end_date
-                                 )
+new_portfolio_df, asset_df = portfolio_return_by_period(holdings=holdings,
+                                                        risk_asset=rotation_etf_shy,
+                                                        bond_asset=cash_trigger_bond_adjclose,
+                                                        spy_data=spy_data,
+                                                        start_date=d1_year_start,
+                                                        end_date=end_date
+                                                        )
 
 plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
@@ -2104,7 +2109,8 @@ d2022_date_str = '2022-01-03'
 d2022_start_date: datetime = datetime.fromisoformat(d2022_date_str)
 
 
-new_portfolio_df, assets_df = asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
+new_portfolio_df, assets_df = portfolio_return_by_period(holdings=holdings,
+                                                                    risk_asset=rotation_etf_shy,
                                                                     bond_asset=cash_trigger_bond_adjclose,
                                                                     spy_data=spy_data,
                                                                     start_date=d2022_start_date,
