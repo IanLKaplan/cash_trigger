@@ -1899,22 +1899,35 @@ def investment_return(holdings: float, investment_df: pd.DataFrame, prices_df: p
     portfolio_df.columns = ['portfolio']
     return portfolio_df
 
-all_assets = pd.concat([rotation_etf_close, cash_trigger_bond_adjclose], axis=1)
 
-asset_df = get_asset_investments(risk_asset=rotation_etf_shy,
+def portfolio_return_by_period(holdings: float,
+                               risk_asset: pd.DataFrame,
+                               bond_asset: pd.DataFrame,
+                               spy_data: SpyData,
+                               start_date: datetime,
+                               end_date: datetime) -> Tuple[pd.DataFrame, pd.DataFrame]:
+
+    asset_df = get_asset_investments(risk_asset=risk_asset,
+                                 bond_asset=bond_asset,
+                                 spy_data=spy_data,
+                                 start_date=start_date,
+                                 end_date=end_date
+                                 )
+    all_assets = pd.concat([rotation_etf_close, cash_trigger_bond_adjclose], axis=1)
+    portfolio_df = investment_return(holdings=holdings,
+                                     investment_df=asset_df,
+                                     prices_df=all_assets)
+    return portfolio_df, assets_df
+
+
+new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
                                  bond_asset=cash_trigger_bond_adjclose,
                                  spy_data=spy_data,
                                  start_date=start_date,
                                  end_date=end_date
                                  )
 
-new_portfolio_df = investment_return(holdings=holdings,
-                                     investment_df=asset_df,
-                                     prices_df=all_assets)
-
-new_portfolio_adj_df, spy_period_adj = adjust_time_series(new_portfolio_df, spy_close)
-
-plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_adj_df, spy_df=spy_period_adj)
+plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
 
 # <h4>
@@ -1960,20 +1973,14 @@ print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='
 
 d10_year_start = end_date - relativedelta(years=10)
 
-asset_df = get_asset_investments(risk_asset=rotation_etf_shy,
+new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
                                  bond_asset=cash_trigger_bond_adjclose,
                                  spy_data=spy_data,
                                  start_date=d10_year_start,
                                  end_date=end_date
                                  )
 
-new_portfolio_df = investment_return(holdings=holdings,
-                                     investment_df=asset_df,
-                                     prices_df=all_assets)
-
-new_portfolio_adj_df, spy_period_adj = adjust_time_series(new_portfolio_df, spy_close)
-
-plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_adj_df, spy_df=spy_period_adj)
+plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
 
 # <h3>
@@ -1998,20 +2005,14 @@ terminal_vals_df = pd.DataFrame(terminal_vals_s).transpose()
 print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='fancy_grid', floatfmt=".0f"))
 
 
-asset_df = get_asset_investments(risk_asset=rotation_etf_shy,
+new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
                                  bond_asset=cash_trigger_bond_adjclose,
                                  spy_data=spy_data,
                                  start_date=d5_year_start,
                                  end_date=end_date
                                  )
 
-new_portfolio_df = investment_return(holdings=holdings,
-                                     investment_df=asset_df,
-                                     prices_df=all_assets)
-
-new_portfolio_adj_df, spy_period_adj = adjust_time_series(new_portfolio_df, spy_close)
-
-plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_adj_df, spy_df=spy_period_adj)
+plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
 
 # <h3>
@@ -2036,20 +2037,14 @@ terminal_vals_df = pd.DataFrame(terminal_vals_s).transpose()
 print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='fancy_grid', floatfmt=".0f"))
 
 
-asset_df = get_asset_investments(risk_asset=rotation_etf_shy,
+new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
                                  bond_asset=cash_trigger_bond_adjclose,
                                  spy_data=spy_data,
                                  start_date=d3_year_start,
                                  end_date=end_date
                                  )
 
-new_portfolio_df = investment_return(holdings=holdings,
-                                     investment_df=asset_df,
-                                     prices_df=all_assets)
-
-new_portfolio_adj_df, spy_period_adj = adjust_time_series(new_portfolio_df, spy_close)
-
-plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_adj_df, spy_df=spy_period_adj)
+plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
 
 # <h3>
@@ -2074,20 +2069,14 @@ terminal_vals_df = pd.DataFrame(terminal_vals_s).transpose()
 print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='fancy_grid', floatfmt=".0f"))
 
 
-asset_df = get_asset_investments(risk_asset=rotation_etf_shy,
+new_portfolio_df, asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
                                  bond_asset=cash_trigger_bond_adjclose,
                                  spy_data=spy_data,
                                  start_date=d1_year_start,
                                  end_date=end_date
                                  )
 
-new_portfolio_df = investment_return(holdings=holdings,
-                                     investment_df=asset_df,
-                                     prices_df=all_assets)
-
-new_portfolio_adj_df, spy_period_adj = adjust_time_series(new_portfolio_df, spy_close)
-
-plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_adj_df, spy_df=spy_period_adj)
+plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
 
 # <h3>
@@ -2114,20 +2103,16 @@ print(tabulate(terminal_vals_df, headers=[*terminal_vals_df.columns], tablefmt='
 d2022_date_str = '2022-01-03'
 d2022_start_date: datetime = datetime.fromisoformat(d2022_date_str)
 
-asset_df = get_asset_investments(risk_asset=rotation_etf_shy,
-                                 bond_asset=cash_trigger_bond_adjclose,
-                                 spy_data=spy_data,
-                                 start_date=d2022_start_date,
-                                 end_date=end_date
-                                 )
 
-new_portfolio_df = investment_return(holdings=holdings,
-                                     investment_df=asset_df,
-                                     prices_df=all_assets)
+new_portfolio_df, assets_df = asset_df = portfolio_return_by_period(risk_asset=rotation_etf_shy,
+                                                                    bond_asset=cash_trigger_bond_adjclose,
+                                                                    spy_data=spy_data,
+                                                                    start_date=d2022_start_date,
+                                                                    end_date=end_date
+                                                                    )
 
-new_portfolio_adj_df, spy_period_adj = adjust_time_series(new_portfolio_df, spy_close)
 
-plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_adj_df, spy_df=spy_period_adj)
+plot_df = build_plot_data(holdings=holdings, portfolio_df=new_portfolio_df, spy_df=spy_close)
 
 
 # <h3>
