@@ -592,6 +592,85 @@ def apply_return(start_val: float, return_df: pd.DataFrame) -> np.array:
     return port_a
 
 
+
+def collapse_asset_df(asset_df: pd.DataFrame) -> pd.DataFrame:
+    """
+
+    :param asset_df: columns: asset, start_date, end_date
+    :return:
+    """
+    row_l = list()
+    row = asset_df[0:1]
+    cur_asset = row['asset'][0]
+    row_l.append(row)
+    row_ix = 0
+    for index in range(1, asset_df.shape[0]):
+        next_row = asset_df[:][index:index+1]
+        next_asset = next_row['asset'][0]
+        if next_asset == cur_asset:
+            next_end_date = next_row['end_date'][0]
+            last_row = row_l[row_ix]
+            last_row.columns = asset_df.columns
+            t_l = [last_row['asset'][0], last_row['start_date'][0], next_end_date]
+            t_df = pd.DataFrame(t_l).transpose()
+            t_df.columns = asset_df.columns
+            row_l[row_ix] = t_df
+        else:
+            row_l.append(next_row)
+            row_ix = row_ix + 1
+            cur_asset = next_asset
+    collapse_df = pd.DataFrame()
+    for i in range(len(row_l)):
+        collapse_df = pd.concat([collapse_df, row_l[i]], axis=0)
+    return collapse_df
+
+
+def get_asset_investments(risk_asset: pd.DataFrame,
+                          bond_asset: pd.DataFrame,
+                          spy_data: SpyData,
+                          start_date: datetime,
+                          end_date: datetime) -> pd.DataFrame:
+    """
+    :param risk_asset: the risk asset set
+    :param bond_asset: the bond asset set
+    :param spy_data:  SpyData object
+    :param start_date: the start date for the period over which the calculation is performed.
+    :param end_date: the end date for the period over which the calculation is performed.
+    :return: a data frame with the columns: asset, start_date, end_date
+            The asset will be the asset symbol (e.g., 'SPY', 'QQQ', etc)  The
+            start date will be the start_date on which the asset should be purchased.
+            The date is an ISO date in string format. The end_date is the date that
+            the asset should be sold.
+    """
+    name_l: List = []
+    risk_l: List = []
+    date_l: List = []
+    end_date_l: List = []
+    month_periods = find_month_periods(start_date, end_date, risk_asset)
+    for index, period in month_periods.iterrows():
+        month_start_ix = period['start_ix']
+        month_end_ix = period['end_ix']
+        # back_start_ix is the start of the look back period used to calculate the highest returning asset
+        back_start_ix = (month_start_ix - trading_quarter) if (month_start_ix - trading_quarter) >= 0 else 0
+        period_start_date: datetime = convert_date(period['start_date'])
+        period_end_date: datetime = convert_date(period['end_date'])
+        date_l.append(period_start_date)
+        end_date_l.append(period_end_date)
+        asset_name = ''
+        if spy_data.risk_state(period_start_date) == RiskState.RISK_ON:
+            asset_name: str = chooseAssetName(back_start_ix, month_end_ix, risk_asset)
+        else:  # RISK_OFF - bonds
+            asset_name: str = chooseAssetName(back_start_ix, month_end_ix, bond_asset)
+        name_l.append(asset_name)
+    asset_df = pd.DataFrame([name_l, date_l, end_date_l]).transpose()
+    asset_df.index = date_l
+    asset_df.columns = ['asset', 'start_date', 'end_date']
+    asset_df = collapse_asset_df(asset_df=asset_df)
+    return asset_df
+
+
+
+
 def portfolio_return(holdings: float,
                      risk_asset: pd.DataFrame,
                      bond_asset: pd.DataFrame,
@@ -602,41 +681,44 @@ def portfolio_return(holdings: float,
     portfolio_val = holdings
     name_l: List = []
     date_l: List = []
-    month_periods = find_month_periods(start_date, end_date, risk_asset)
-    for index, period in month_periods.iterrows():
-        month_start_ix = period['start_ix']
-        month_end_ix = period['end_ix']
-        period_start_date: datetime = convert_date(period['start_date'])
-        # back_start_ix is the start of the look back period used to calculate the highest returning asset
-        back_start_ix = (month_start_ix - trading_quarter) if (month_start_ix - trading_quarter) >= 0 else 0
-        r_df = pd.DataFrame()
-        asset_name = ''
-        if spy_data.risk_state(period_start_date) == RiskState.RISK_ON:
-            asset_name: str = chooseAssetName(back_start_ix, month_start_ix, risk_asset)
-            risk_close_prices = pd.DataFrame(risk_asset[asset_name][month_start_ix:month_end_ix+1])
-            r_df = return_df(risk_close_prices)
-        else: # RISK_OFF - bonds
-            asset_name: str = chooseAssetName(back_start_ix, month_start_ix, bond_asset)
-            bond_close_prices = pd.DataFrame(bond_asset[asset_name][month_start_ix:month_end_ix+1])
-            r_df = return_df(bond_close_prices)
+    assets_df = get_asset_investments(risk_asset=risk_asset,
+                                      bond_asset=bond_asset,
+                                      spy_data=spy_data,
+                                      start_date=start_date,
+                                      end_date=end_date)
+
+    # Remove any duplicate columns (assets that are in both the risk_asset and bond_asset
+    t_df = pd.concat([risk_asset, bond_asset], axis=1)
+    all_assets = t_df.loc[:, ~t_df.columns.duplicated()]
+    asset_date_index = all_assets.index
+    for index, asset in assets_df.iterrows():
+        asset_name = asset['asset']
+        period_start = asset['start_date']
+        period_end = asset['end_date']
+        start_ix = findDateIndex(date_index=asset_date_index, search_date=period_start)
+        end_ix = findDateIndex(date_index=asset_date_index, search_date=period_end)
         name_l.append(asset_name)
-        date_l.append(period['start_date'])
-        port_month_a = apply_return(portfolio_val, r_df)
-        portfolio_val = port_month_a[-1]
-        portfolio_a = np.append(portfolio_a, port_month_a)
+        date_l.append(period_start)
+        prices = all_assets[asset_name][start_ix:end_ix+1]
+        prices_df = pd.DataFrame(prices)
+        r_df = return_df(prices_df)
+        port_period_a = apply_return(portfolio_val, r_df)
+        portfolio_val = port_period_a[-1]
+        portfolio_a = np.append(portfolio_a, port_period_a)
     portfolio_df = pd.DataFrame(portfolio_a)
     portfolio_df.columns = ['portfolio']
-    num_rows = month_periods.shape[0]
-    first_row = month_periods[:][0:1]
-    last_row = month_periods[:][num_rows - 1:num_rows]
-    start_ix = first_row['start_ix'].values[0]
-    end_ix = last_row['end_ix'].values[0]
-    date_index = risk_asset.index
-    portfolio_index = date_index[start_ix:end_ix + 1]
+    num_rows = assets_df.shape[0]
+    first_row = assets_df[:][0:1]
+    last_row = assets_df[:][num_rows - 1:num_rows]
+    port_start_date = first_row['start_date'][0]
+    port_start_ix = findDateIndex(date_index=asset_date_index, search_date=port_start_date)
+    port_end_date = last_row['end_date'][0]
+    port_end_ix = findDateIndex(date_index=asset_date_index, search_date=port_end_date)
+    portfolio_index = asset_date_index[port_start_ix:port_end_ix+1]
     portfolio_df.index = portfolio_index
-    assets_df = pd.DataFrame(name_l)
-    assets_df.columns = ['asset']
-    assets_df.index = date_l
+    port_assets_df = pd.DataFrame(name_l)
+    port_assets_df.columns = ['asset']
+    port_assets_df.index = date_l
     return portfolio_df, assets_df
 
 
@@ -810,21 +892,6 @@ spy_only_portfolio, unused = portfolio_return(holdings=spy_start_val,
 
 plot_df = build_plot_data(holdings=spy_start_val, portfolio_df=spy_only_portfolio, spy_df=spy_close)
 # plot_df.plot(grid=True, title='SPY as the only portfolio asset and SPY', figsize=(10,6))
-
-
-def collapse_asset_df(asset_df: pd.DataFrame) -> pd.DataFrame:
-    row = asset_df[0:1]
-    cur_asset = row['asset'][0]
-    collapse_df = pd.DataFrame(row)
-    for index in range(1, asset_df.shape[0]):
-        row = asset_df[:][index:index+1]
-        row_name = row['asset'][0]
-        if row_name != cur_asset:
-            collapse_df = pd.concat([collapse_df, row])
-            cur_asset = row_name
-    if collapse_df.tail(1).index[0] != asset_df.tail(1).index[0]:
-        collapse_df = pd.concat([collapse_df, asset_df.tail(1)])
-    return collapse_df
 
 
 holdings = 100000
@@ -1804,54 +1871,6 @@ print(tabulate(one_year_assets, headers=[*one_year_assets.columns], tablefmt='fa
 # </p>
 
 # In[ ]:
-
-
-def get_asset_investments(risk_asset: pd.DataFrame,
-                          bond_asset: pd.DataFrame,
-                          spy_data: SpyData,
-                          start_date: datetime,
-                          end_date: datetime) -> pd.DataFrame:
-    """
-    :param risk_asset: the risk asset set
-    :param bond_asset: the bond asset set
-    :param spy_data:  SpyData object
-    :param start_date: the start date for the period over which the calculation is performed.
-    :param end_date: the end date for the period over which the calculation is performed.
-    :return: a data frame with the columns: asset, start_date, end_date and risk-on.
-            The asset will be the asset symbol (e.g., 'SPY', 'QQQ', etc)  The
-            start date will be the start_date on which the asset should be purchased.
-            The date is an ISO date in string format. The end_date is the date that
-            the asset should be sold. The risk-on column contains True or False values.
-            If the value is True, then the period is "risk-on".
-    """
-    name_l: List = []
-    risk_l: List = []
-    date_l: List = []
-    end_date_l: List = []
-    month_periods = find_month_periods(start_date, end_date, risk_asset)
-    for index, period in month_periods.iterrows():
-        month_start_ix = period['start_ix']
-        month_end_ix = period['end_ix']
-        # back_start_ix is the start of the look back period used to calculate the highest returning asset
-        back_start_ix = (month_start_ix - trading_quarter) if (month_start_ix - trading_quarter) >= 0 else 0
-        period_start_date: datetime = convert_date(period['start_date'])
-        period_end_date: datetime = convert_date(period['end_date'])
-        date_l.append(period_start_date)
-        end_date_l.append(period_end_date)
-        asset_name = ''
-        if spy_data.risk_state(period_start_date) == RiskState.RISK_ON:
-            asset_name: str = chooseAssetName(back_start_ix, month_end_ix, risk_asset)
-            risk_on: bool = True
-        else:  # RISK_OFF - bonds
-            asset_name: str = chooseAssetName(back_start_ix, month_end_ix, bond_asset)
-            risk_on: bool = False
-        name_l.append(asset_name)
-        risk_l.append(risk_on)
-    asset_df = pd.DataFrame([name_l, date_l, end_date_l, risk_l]).transpose()
-    asset_df.index = date_l
-    asset_df.columns = ['asset', 'start_date', 'end_date', 'risk-on']
-    asset_df = collapse_asset_df(asset_df=asset_df)
-    return asset_df
 
 
 def investment_return(holdings: float, investment_df: pd.DataFrame, prices_df: pd.DataFrame) -> pd.DataFrame:
