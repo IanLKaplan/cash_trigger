@@ -1931,7 +1931,8 @@ def portfolio_return_by_period(holdings: float,
                                  start_date=start_date,
                                  end_date=end_date
                                  )
-    all_assets = pd.concat([rotation_etf_close, cash_trigger_bond_adjclose], axis=1)
+    t_df = pd.concat([risk_asset, bond_asset], axis=1)
+    all_assets = t_df.loc[:, ~t_df.columns.duplicated()]
     portfolio_df = investment_return(holdings=holdings,
                                      investment_df=asset_df,
                                      prices_df=all_assets)
