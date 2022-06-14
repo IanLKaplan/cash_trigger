@@ -643,7 +643,6 @@ def get_asset_investments(risk_asset: pd.DataFrame,
             the asset should be sold.
     """
     name_l: List = []
-    risk_l: List = []
     date_l: List = []
     end_date_l: List = []
     month_periods = find_month_periods(start_date, end_date, risk_asset)
