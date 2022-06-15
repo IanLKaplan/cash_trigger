@@ -500,9 +500,8 @@ def chooseAssetName(start: int, end: int, asset_set: pd.DataFrame) -> str:
     asset_name = asset_columns[0]
     if len(asset_columns) > 1:
         ret_list = []
-        start_date = asset_set.index[start]
-        end_date = asset_set.index[end]
-        for asset in asset_set.columns:
+        name_l = list(set(asset_set.columns))
+        for asset in name_l:
             ts = asset_set[asset][start:end+1]
             start_val = ts[0]
             end_val = ts[-1]
@@ -657,9 +656,9 @@ def get_asset_investments(risk_asset: pd.DataFrame,
         end_date_l.append(period_end_date)
         asset_name = ''
         if spy_data.risk_state(period_start_date) == RiskState.RISK_ON:
-            asset_name: str = chooseAssetName(back_start_ix, month_end_ix, risk_asset)
+            asset_name: str = chooseAssetName(back_start_ix, month_start_ix, risk_asset)
         else:  # RISK_OFF - bonds
-            asset_name: str = chooseAssetName(back_start_ix, month_end_ix, bond_asset)
+            asset_name: str = chooseAssetName(back_start_ix, month_start_ix, bond_asset)
         name_l.append(asset_name)
     asset_df = pd.DataFrame([name_l, date_l, end_date_l]).transpose()
     asset_df.index = date_l
